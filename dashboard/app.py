@@ -1015,6 +1015,130 @@ def _fetch_iv_data(symbol: str) -> dict:
 
 
 # ─────────────────────────────────────────────
+# MULTI-TIMEFRAME TREND
+# ─────────────────────────────────────────────
+
+# In-memory cache so we don't re-fetch 5-min candles on every dashboard
+# refresh — Dhan rate-limits revoke tokens if we hammer the API.
+_MTF_CACHE: dict = {}                  # {symbol: {"ts": epoch, "data": {...}}}
+_MTF_CACHE_TTL_SECS = 5 * 60           # match the dashboard's 5-min refresh
+
+_MTF_TIMEFRAMES = [
+    ("5min",   "5min"),
+    ("15min",  "15min"),
+    ("30min",  "30min"),
+    ("60min",  "60min"),
+    ("240min", "240min"),
+]
+
+
+def _trend_from_emas(ema9: float, ema20: float, close: float) -> str:
+    """Three-state trend classifier used uniformly across all timeframes."""
+    if any(v is None for v in (ema9, ema20, close)):
+        return "NEUTRAL"
+    if ema9 > ema20 and close > ema9:
+        return "BULL"
+    if ema9 < ema20 and close < ema9:
+        return "BEAR"
+    return "NEUTRAL"
+
+
+def _fetch_mtf_trends(symbol: str) -> dict:
+    """
+    Compute trend on 5/15/30/60/240-minute timeframes for `symbol`.
+
+    Implementation: pull ~10 trading days of 5-min candles from Dhan ONCE,
+    then resample to each higher timeframe. This avoids 5 separate API
+    calls per refresh.
+    """
+    import time as _time
+    sym_up = symbol.upper()
+
+    # ── Cache hit ──
+    cached = _MTF_CACHE.get(sym_up)
+    if cached and (_time.time() - cached["ts"]) < _MTF_CACHE_TTL_SECS:
+        return cached["data"]
+
+    inst = FUTURES_IDS.get(sym_up)
+    if not inst:
+        return {"symbol": sym_up, "error": f"Unknown symbol {sym_up}"}
+
+    try:
+        import pandas as pd
+        from data.indicators import ema, candles_to_df
+
+        dhan = _get_dhan_client()
+        if dhan is None:
+            return {"symbol": sym_up, "error": "Dhan client unavailable — check token"}
+
+        # 10 trading days of 5-min bars ≈ 750 bars. Enough for EMA20 on
+        # the 240-min resample (≈ 50 bars of 240-min over 10 days).
+        from_date = (date.today() - timedelta(days=15)).isoformat()
+        to_date   = date.today().isoformat()
+
+        candles = dhan.get_historical_data(
+            security_id      = inst["security_id"],
+            exchange_segment = inst["exchange"],
+            instrument_type  = inst["instrument"],
+            expiry_code      = 0,
+            from_date        = from_date,
+            to_date          = to_date,
+            interval         = "5",
+        )
+        if not candles:
+            return {"symbol": sym_up, "error": "No candles returned from Dhan"}
+
+        df = candles_to_df(candles)
+        if df.empty or len(df) < 30:
+            return {"symbol": sym_up, "error": f"Insufficient bars ({len(df)})"}
+
+        # ── Resample 5-min to each target TF, then compute EMAs ──
+        trends = {}
+        for label, rule in _MTF_TIMEFRAMES:
+            try:
+                if rule == "5min":
+                    rs = df.copy()
+                else:
+                    rs = df.resample(rule).agg({
+                        "open":  "first",
+                        "high":  "max",
+                        "low":   "min",
+                        "close": "last",
+                        "volume":"sum",
+                    }).dropna()
+                if len(rs) < 25:
+                    trends[label] = {"trend": "NEUTRAL", "reason": f"only {len(rs)} bars"}
+                    continue
+                e9  = ema(rs["close"], 9).iloc[-1]
+                e20 = ema(rs["close"], 20).iloc[-1]
+                close = float(rs["close"].iloc[-1])
+                if pd.isna(e9) or pd.isna(e20):
+                    trends[label] = {"trend": "NEUTRAL", "reason": "EMA not ready"}
+                    continue
+                trends[label] = {
+                    "trend":  _trend_from_emas(float(e9), float(e20), close),
+                    "ema9":   round(float(e9), 2),
+                    "ema20":  round(float(e20), 2),
+                    "close":  round(close, 2),
+                    "bars":   len(rs),
+                }
+            except Exception as e:
+                trends[label] = {"trend": "NEUTRAL", "reason": f"resample error: {e}"}
+
+        result = {
+            "symbol":     sym_up,
+            "trends":     trends,
+            "fetched_at": datetime.now().strftime("%H:%M:%S"),
+            "source":     "dhan",
+        }
+        _MTF_CACHE[sym_up] = {"ts": _time.time(), "data": result}
+        return result
+
+    except Exception as e:
+        return {"symbol": sym_up, "error": f"{type(e).__name__}: {e}"}
+
+
+# ─────────────────────────────────────────────
 # MARKET INTELLIGENCE ROUTES
 # ─────────────────────────────────────────────
 
@@ -1109,6 +1233,18 @@ def api_iv(symbol: str):
     Written by main.py after each option chain refresh.
     """
     return jsonify(_fetch_iv_data(symbol))
+
+
+@app.route("/api/trends/<symbol>")
+def api_trends(symbol: str):
+    """
+    Multi-timeframe trend for a symbol on the 5/15/30/60/240-min timeframes.
+    Trend is derived from EMA(9) vs EMA(20) on each resampled timeframe:
+        BULL    — EMA9 > EMA20 AND close > EMA9
+        BEAR    — EMA9 < EMA20 AND close < EMA9
+        NEUTRAL — anything else (no clear directional alignment)
+    """
+    return jsonify(_fetch_mtf_trends(symbol))
 
 
 @app.route("/api/market_intel")
