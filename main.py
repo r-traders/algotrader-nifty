@@ -60,11 +60,13 @@ logger = logging.getLogger("TradingEngine")
 # ── Instrument registry (symbol → security_id mapping) ──
 # Update these with actual Dhan security IDs from their instrument CSV
 # Security IDs verified from Dhan api-scrip-master.csv (April 2026)
-# NIFTY and BANKNIFTY near-month futures — update security_id monthly after expiry
-# Current: Jun 2026 contracts. Run find_security_ids.py to refresh.
+# NIFTY and BANKNIFTY near-month futures — UPDATE AFTER EVERY MONTHLY EXPIRY.
+# Current near-month (May 11–26, 2026): MAY 2026 contracts.
+# Expiry: Tue 27 May 2026 → switch to JUN (62329 / 62326) on the morning of 27 May.
+# After June expiry switch to JUL (61093 / 61088). Run find_futures_ids.py to refresh.
 INSTRUMENT_REGISTRY = {
     "NIFTY":     {
-        "security_id": "62329",   # NIFTY-JUN2026-FUT — update monthly
+        "security_id": "66071",   # NIFTY-MAY2026-FUT — rolls 27 May → 62329 (JUN)
         "exchange":    "NSE_FNO",
         "instrument":  "FUTIDX",
         "idx_id":      "13",      # NSE_IDX ID for LTP/option chain
@@ -72,7 +74,7 @@ INSTRUMENT_REGISTRY = {
         "base_price":  22000,
     },
     "BANKNIFTY": {
-        "security_id": "62326",   # BANKNIFTY-JUN2026-FUT — update monthly
+        "security_id": "66068",   # BANKNIFTY-MAY2026-FUT — rolls 27 May → 62326 (JUN)
         "exchange":    "NSE_FNO",
         "instrument":  "FUTIDX",
         "idx_id":      "25",      # NSE_IDX ID for LTP/option chain

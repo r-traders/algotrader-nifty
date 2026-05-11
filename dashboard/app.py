@@ -51,18 +51,18 @@ CPR_CACHE_PATH  = os.path.join(BASE_DIR, "logs", "cpr_cache.json")
 
 INSTRUMENT_IDS = {
     "NIFTY": {
-        "security_id": "62329",
+        "security_id": "66071",                # NIFTY-MAY2026-FUT
         "exchange":    "NSE_FNO",
         "instrument":  "FUTIDX",
-        "label":       "NIFTY Jun FUT",
-        "expiry":      "2026-06-30",
+        "label":       "NIFTY May FUT",
+        "expiry":      "2026-05-26",
     },
     "BANKNIFTY": {
-        "security_id": "62326",
+        "security_id": "66068",                # BANKNIFTY-MAY2026-FUT
         "exchange":    "NSE_FNO",
         "instrument":  "FUTIDX",
-        "label":       "BANKNIFTY Jun FUT",
-        "expiry":      "2026-06-30",
+        "label":       "BANKNIFTY May FUT",
+        "expiry":      "2026-05-26",
     },
 }
 
@@ -1145,7 +1145,7 @@ def _fetch_mtf_trends(symbol: str) -> dict:
 @app.route("/api/ltp")
 def api_ltp():
     """
-    Live futures price for NIFTY Jun FUT and BANKNIFTY Jun FUT.
+    Live futures price for the current near-month NIFTY + BANKNIFTY contracts.
     Primary:  Dhan NSE_FNO LTP (futures contract).
     Fallback: Yahoo Finance index spot (^NSEI / ^NSEBANK).
     """
@@ -1195,7 +1195,7 @@ def api_ltp():
 
         result[sym] = {
             "ltp":    ltp,
-            "label":  inst.get("label", sym),    # "NIFTY Jun FUT" / "BANKNIFTY Jun FUT"
+            "label":  inst.get("label", sym),    # display label from INSTRUMENT_IDS
             "expiry": inst.get("expiry", ""),
             "source": source,
             "error":  error,
