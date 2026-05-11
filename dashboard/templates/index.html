@@ -140,6 +140,7 @@
       background: inherit; z-index: -1;
     }
 
+    /* Dark-theme card gradients (defaults) */
     .card-pnl   { background: linear-gradient(135deg, #003320 0%, #0d1f17 100%); border-color: #00e67640; }
     .card-pnl:hover { box-shadow: 0 8px 32px rgba(0,230,118,0.15); }
 
@@ -157,6 +158,36 @@
 
     .card-loss  { background: linear-gradient(135deg, #2d0a0a 0%, #1f0d0d 100%); border-color: #ff4b6e40; }
     .card-loss:hover { box-shadow: 0 8px 32px rgba(255,75,110,0.15); }
+
+    /* Light-theme card overrides — clean surface + colored left border */
+    html[data-theme="light"] .card {
+      background: var(--surface) !important;
+      box-shadow: 0 1px 3px rgba(50,60,80,0.06);
+      border-left-width: 4px;
+    }
+    html[data-theme="light"] .card-pnl    { border-left-color: var(--green);  border-color: var(--border); }
+    html[data-theme="light"] .card-pnl:hover    { box-shadow: 0 6px 22px rgba(31,157,99,0.18); }
+    html[data-theme="light"] .card-pos    { border-left-color: var(--blue);   border-color: var(--border); }
+    html[data-theme="light"] .card-pos:hover    { box-shadow: 0 6px 22px rgba(34,114,201,0.18); }
+    html[data-theme="light"] .card-trades { border-left-color: var(--purple); border-color: var(--border); }
+    html[data-theme="light"] .card-trades:hover { box-shadow: 0 6px 22px rgba(128,71,212,0.18); }
+    html[data-theme="light"] .card-wr     { border-left-color: var(--yellow); border-color: var(--border); }
+    html[data-theme="light"] .card-wr:hover     { box-shadow: 0 6px 22px rgba(180,138,20,0.18); }
+    html[data-theme="light"] .card-cap    { border-left-color: var(--teal);   border-color: var(--border); }
+    html[data-theme="light"] .card-cap:hover    { box-shadow: 0 6px 22px rgba(22,156,138,0.18); }
+    html[data-theme="light"] .card-loss   { border-left-color: var(--red);    border-color: var(--border); }
+    html[data-theme="light"] .card-loss:hover   { box-shadow: 0 6px 22px rgba(214,51,78,0.18); }
+
+    /* In light mode the .val-* glow text-shadows look smudged; tone them down. */
+    html[data-theme="light"] .val-green,
+    html[data-theme="light"] .val-red,
+    html[data-theme="light"] .val-blue,
+    html[data-theme="light"] .val-purple,
+    html[data-theme="light"] .val-yellow,
+    html[data-theme="light"] .val-teal { text-shadow: none; }
+
+    /* Progress bar background needs theme adaptation too. */
+    html[data-theme="light"] .prog-wrap { background: rgba(50,60,80,0.10); }
 
     .card-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px; font-weight: 600; }
     .card-icon  { font-size: 22px; float: right; margin-top: -4px; opacity: 0.8; }
@@ -1045,8 +1076,10 @@
     if (btn) btn.textContent = theme === 'light' ? '☀️' : '🌙';
   }
   (function initTheme() {
-    const saved = (localStorage.getItem('algotrader_theme') || 'dark').toLowerCase();
-    applyTheme(saved === 'light' ? 'light' : 'dark');
+    // Light mode is the default; user can toggle to dark via the 🌙 button
+    // and that preference persists in localStorage.
+    const saved = (localStorage.getItem('algotrader_theme') || 'light').toLowerCase();
+    applyTheme(saved === 'dark' ? 'dark' : 'light');
   })();
 
   document.addEventListener('DOMContentLoaded', () => {
