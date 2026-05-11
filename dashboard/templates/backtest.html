@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Backtest Results — AlgoTrader</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    :root {
+      --bg:#0d1117; --surface:#161b27; --surface2:#1c2333; --border:#2a3750;
+      --text:#dce7f5; --muted:#7a90b8;
+      --green:#3dd68c; --red:#f0617a; --blue:#60b8f5;
+      --purple:#c084f5; --orange:#f5a623; --teal:#2dd4bf; --yellow:#f5d060;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body { background:var(--bg); color:var(--text); font-family:'Inter','Segoe UI',sans-serif; font-size:14px; min-height:100vh; }
+    body::before {
+      content:''; position:fixed; inset:0; z-index:-1;
+      background: radial-gradient(ellipse 80% 40% at 10% 10%,#0a1628 0%,transparent 60%),
+                  radial-gradient(ellipse 60% 50% at 90% 80%,#0d1a2e 0%,transparent 60%);
+    }
+    .nav {
+      background:linear-gradient(90deg,#0a1628,#0d1f38,#0a1628);
+      border-bottom:1px solid #1e3a5f; padding:14px 28px;
+      display:flex; align-items:center; justify-content:space-between;
+      position:sticky; top:0; z-index:100;
+      box-shadow:0 2px 20px rgba(0,0,0,0.5);
+    }
+    .nav-brand { font-size:20px; font-weight:800; background:linear-gradient(135deg,#4fc3f7,#ce93d8,#00e676); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+    .nav-links { display:flex; gap:8px; }
+    .nav-link { padding:6px 14px; border-radius:20px; font-size:12px; font-weight:600; text-decoration:none; transition:all .2s; }
+    .nav-link.active { background:linear-gradient(135deg,#1565c0,#4fc3f7); color:#fff; box-shadow:0 2px 12px rgba(79,195,247,.3); }
+    .nav-link:not(.active) { color:var(--muted); }
+    .nav-link:not(.active):hover { color:var(--blue); }
+    .last-updated { color:var(--muted); font-size:11px; }
+    .container { padding:24px 28px; max-width:1600px; margin:0 auto; }
+
+    .no-data { text-align:center; padding:100px 20px; color:var(--muted); }
+    .no-data .icon { font-size:56px; margin-bottom:20px; }
+    .no-data h2 { color:var(--text); margin-bottom:10px; font-size:22px; font-weight:700; }
+    .no-data code {
+      background:var(--surface); border:1px solid rgba(79,195,247,.3); border-radius:10px;
+      padding:14px 24px; display:inline-block; margin-top:18px;
+      color:var(--green); font-size:13px;
+    }
+
+    .cards-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:16px; margin-bottom:24px; }
+    .card { border-radius:16px; padding:20px; border:1px solid var(--border); transition:transform .2s,box-shadow .2s; }
+    .card:hover { transform:translateY(-2px); }
+    .card-ret    { background:linear-gradient(135deg,#003320,#0d1f17); border-color:#00e67640; }
+    .card-ret:hover  { box-shadow:0 8px 32px rgba(0,230,118,.15); }
+    .card-pnl    { background:linear-gradient(135deg,#003320,#0d1f17); border-color:#00e67640; }
+    .card-trades { background:linear-gradient(135deg,#1a0d30,#130d1f); border-color:#ce93d840; }
+    .card-wr     { background:linear-gradient(135deg,#1a1500,#1f1800); border-color:#ffd54f40; }
+    .card-pf     { background:linear-gradient(135deg,#0a1d40,#0d1f30); border-color:#4fc3f740; }
+    .card-sh     { background:linear-gradient(135deg,#001a2e,#0d1f30); border-color:#26c6da40; }
+    .card-label { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.8px; margin-bottom:10px; font-weight:600; }
+    .card-icon  { font-size:20px; float:right; margin-top:-2px; opacity:.8; }
+    .card-value { font-size:24px; font-weight:800; }
+    .card-sub   { font-size:11px; color:var(--muted); margin-top:6px; }
+    .val-green  { color:var(--green); text-shadow:0 0 20px rgba(0,230,118,.4); }
+    .val-red    { color:var(--red);   text-shadow:0 0 20px rgba(255,75,110,.4); }
+    .val-blue   { color:var(--blue);  text-shadow:0 0 20px rgba(79,195,247,.4); }
+    .val-purple { color:var(--purple);text-shadow:0 0 20px rgba(206,147,216,.4); }
+    .val-yellow { color:var(--yellow);text-shadow:0 0 20px rgba(255,213,79,.4); }
+    .val-teal   { color:var(--teal);  text-shadow:0 0 20px rgba(38,198,218,.4); }
+    .val-white  { color:var(--text); }
+
+    .section { background:var(--surface); border:1px solid var(--border); border-radius:16px; margin-bottom:20px; overflow:hidden; }
+    .section-header { padding:14px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:linear-gradient(90deg,var(--surface2),var(--surface)); }
+    .section-title  { font-size:13px; font-weight:700; color:var(--text); display:flex; align-items:center; gap:8px; }
+    .section-title .dot { width:8px; height:8px; border-radius:50%; }
+    .section-body   { padding:16px 20px; overflow-x:auto; }
+
+    table { width:100%; border-collapse:collapse; }
+    th { background:var(--surface2); color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.8px; padding:10px 14px; text-align:left; border-bottom:1px solid var(--border); font-weight:700; }
+    td { padding:11px 14px; border-bottom:1px solid rgba(30,42,58,.6); font-size:13px; }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:rgba(79,195,247,.04); }
+
+    .badge { padding:3px 10px; border-radius:10px; font-size:10px; font-weight:700; display:inline-block; letter-spacing:.3px; }
+    .badge-buy    { background:rgba(0,230,118,.15);  color:var(--green);  border:1px solid rgba(0,230,118,.3); }
+    .badge-sell   { background:rgba(255,75,110,.15); color:var(--red);    border:1px solid rgba(255,75,110,.3); }
+    .badge-target { background:rgba(0,230,118,.15);  color:var(--green);  border:1px solid rgba(0,230,118,.3); }
+    .badge-sl     { background:rgba(255,75,110,.15); color:var(--red);    border:1px solid rgba(255,75,110,.3); }
+    .badge-eod    { background:rgba(107,127,168,.1); color:var(--muted);  border:1px solid rgba(107,127,168,.2); }
+
+    .two-col   { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .three-col { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+    @media (max-width:900px) { .two-col,.three-col { grid-template-columns:1fr; } }
+
+    .chart-wrap-tall { position:relative; height:380px; }
+
+    .trade-card {
+      background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:18px;
+    }
+    .trade-card .tc-header { display:flex; justify-content:space-between; margin-bottom:10px; align-items:center; }
+    .trade-card .tc-sym  { font-weight:800; font-size:16px; color:var(--text); }
+    .trade-card .tc-pnl  { font-size:22px; font-weight:800; }
+    .trade-card .tc-row  { display:flex; justify-content:space-between; margin-top:8px; padding-top:8px; border-top:1px solid var(--border); }
+    .trade-card .tc-row:first-of-type { border-top:none; }
+    .trade-card .tc-lbl  { color:var(--muted); font-size:11px; }
+    .trade-card .tc-val  { font-size:12px; font-weight:600; color:var(--text); }
+
+    .accent-green  { border-top:2px solid var(--green); }
+    .accent-blue   { border-top:2px solid var(--blue); }
+    .accent-purple { border-top:2px solid var(--purple); }
+    .accent-orange { border-top:2px solid var(--orange); }
+    .accent-teal   { border-top:2px solid var(--teal); }
+    .accent-yellow { border-top:2px solid var(--yellow); }
+  </style>
+</head>
+<body>
+
+<div class="nav">
+  <div class="nav-brand">⚡ AlgoTrader — NSE</div>
+  <div class="nav-links">
+    <a href="/" class="nav-link">📊 Live</a>
+    <a href="/backtest" class="nav-link active">📈 Backtest</a>
+  </div>
+  <span class="last-updated">🕐 {{ now }}</span>
+</div>
+
+<div class="container">
+
+{% if not has_data %}
+<!-- ── NO DATA STATE ── -->
+<div class="no-data">
+  <div class="icon">📊</div>
+  <h2>No Backtest Results Yet</h2>
+  <p>Run the backtest engine first to see results here.</p>
+  <code>/Library/Developer/CommandLineTools/usr/bin/python3 backtest/run_backtest.py</code>
+  <p style="margin-top:16px;color:var(--muted);font-size:13px;">Results will appear here automatically once the backtest completes.</p>
+</div>
+
+{% else %}
+<!-- ── SUMMARY CARDS ── -->
+<div class="cards-row">
+  <div class="card card-ret">
+    <div class="card-icon">📈</div>
+    <div class="card-label">Total Return</div>
+    <div class="card-value {% if ret_pct >= 0 %}val-green{% else %}val-red{% endif %}">{{ "{:+.1f}".format(ret_pct) }}%</div>
+    <div class="card-sub">Jan 2025 → Apr 2, 2026</div>
+  </div>
+  <div class="card card-pnl">
+    <div class="card-icon">💰</div>
+    <div class="card-label">Net P&L</div>
+    <div class="card-value {% if total_pnl >= 0 %}val-green{% else %}val-red{% endif %}">₹{{ "{:,.0f}".format(total_pnl) }}</div>
+    <div class="card-sub">₹{{ "{:,.0f}".format(initial_cap) }} → ₹{{ "{:,.0f}".format(final_cap) }}</div>
+  </div>
+  <div class="card card-trades">
+    <div class="card-icon">🔄</div>
+    <div class="card-label">Total Trades</div>
+    <div class="card-value val-purple">{{ total_trades }}</div>
+    <div class="card-sub">Across {{ summary|length }} symbols</div>
+  </div>
+  <div class="card card-wr">
+    <div class="card-icon">🎯</div>
+    <div class="card-label">Win Rate</div>
+    <div class="card-value {% if overall_wr >= 50 %}val-yellow{% else %}val-red{% endif %}">{{ overall_wr }}%</div>
+    <div class="card-sub">Overall across all symbols</div>
+  </div>
+  {% if summary %}
+  <div class="card card-pf">
+    <div class="card-icon">⚡</div>
+    <div class="card-label">Best Profit Factor</div>
+    <div class="card-value val-blue">{{ summary | sort(attribute='profit_factor', reverse=True) | first | attr('profit_factor') }}</div>
+    <div class="card-sub">{{ summary | sort(attribute='profit_factor', reverse=True) | first | attr('symbol') }}</div>
+  </div>
+  <div class="card card-sh">
+    <div class="card-icon">📐</div>
+    <div class="card-label">Best Sharpe</div>
+    <div class="card-value val-teal">{{ summary | sort(attribute='sharpe_ratio', reverse=True) | first | attr('sharpe_ratio') }}</div>
+    <div class="card-sub">{{ summary | sort(attribute='sharpe_ratio', reverse=True) | first | attr('symbol') }}</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- ── CHARTS ROW ── -->
+<div class="two-col">
+
+  <!-- Equity Curves -->
+  <div class="section accent-blue">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--blue);box-shadow:0 0 8px var(--blue);"></span>
+        Equity Curves
+      </span>
+    </div>
+    <div class="section-body">
+      <div class="chart-wrap-tall"><canvas id="equityChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Monthly P&L Bar Chart -->
+  <div class="section accent-green">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--green);box-shadow:0 0 8px var(--green);"></span>
+        Monthly P&L
+      </span>
+    </div>
+    <div class="section-body">
+      <div class="chart-wrap-tall"><canvas id="monthlyChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── PER SYMBOL SUMMARY TABLE ── -->
+<div class="section accent-teal">
+  <div class="section-header">
+    <span class="section-title">
+      <span class="dot" style="background:var(--teal);box-shadow:0 0 8px var(--teal);"></span>
+      Per Symbol Performance
+    </span>
+    <a href="/api/backtest/trades" style="color:var(--blue);font-size:12px;text-decoration:none;font-weight:600;">Download JSON ↗</a>
+  </div>
+  <div class="section-body" style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>Symbol</th><th>Trades</th><th>Winners</th><th>Losers</th>
+          <th>Win%</th><th>Net P&L</th><th>Avg Win</th><th>Avg Loss</th>
+          <th>Profit Factor</th><th>Max DD%</th><th>Sharpe</th><th>Max Loss Run</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in summary %}
+        <tr>
+          <td><strong style="color:var(--text);">{{ r.symbol }}</strong></td>
+          <td style="color:var(--muted);">{{ r.total_trades }}</td>
+          <td style="color:var(--green);font-weight:600;">{{ r.winners }}</td>
+          <td style="color:var(--red);font-weight:600;">{{ r.losers }}</td>
+          <td style="font-weight:700;{% if r.win_rate|float >= 50 %}color:var(--green){% else %}color:var(--red){% endif %};">{{ r.win_rate }}%</td>
+          <td style="font-weight:700;{% if r.total_pnl|float >= 0 %}color:var(--green){% else %}color:var(--red){% endif %};">
+            ₹{{ "{:,.0f}".format(r.total_pnl|float) }}
+          </td>
+          <td style="color:var(--green);">₹{{ "{:,.0f}".format(r.avg_win|float) }}</td>
+          <td style="color:var(--red);">₹{{ "{:,.0f}".format(r.avg_loss|float) }}</td>
+          <td style="font-weight:600;{% if r.profit_factor|float >= 1.5 %}color:var(--green){% elif r.profit_factor|float >= 1 %}color:var(--yellow){% else %}color:var(--red){% endif %};">{{ r.profit_factor }}</td>
+          <td style="{% if r.max_drawdown_pct|float <= 10 %}color:var(--green){% elif r.max_drawdown_pct|float <= 20 %}color:var(--yellow){% else %}color:var(--red){% endif %};">{{ r.max_drawdown_pct }}%</td>
+          <td style="{% if r.sharpe_ratio|float >= 1 %}color:var(--green){% elif r.sharpe_ratio|float >= 0 %}color:var(--yellow){% else %}color:var(--red){% endif %};">{{ r.sharpe_ratio }}</td>
+          <td style="{% if r.max_consec_loss|int <= 3 %}color:var(--green){% elif r.max_consec_loss|int <= 5 %}color:var(--yellow){% else %}color:var(--red){% endif %};">{{ r.max_consec_loss }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── BEST & WORST TRADES ── -->
+{% if best_trade and worst_trade %}
+<div class="two-col">
+  <div class="section accent-green">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--green);box-shadow:0 0 8px var(--green);"></span>
+        🏆 Best Trade
+      </span>
+    </div>
+    <div class="section-body">
+      <div class="trade-card">
+        <div class="tc-header">
+          <span class="tc-sym">{{ best_trade.symbol }}</span>
+          <span class="tc-pnl val-green">₹{{ "{:,.0f}".format(best_trade.pnl_net|float) }}</span>
+        </div>
+        <div class="tc-row"><span class="tc-lbl">Direction</span>
+          <span class="badge {% if best_trade.direction == 'BUY' %}badge-buy{% else %}badge-sell{% endif %}">{{ best_trade.direction }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Entry</span><span class="tc-val">{{ best_trade.entry_date }} {{ best_trade.entry_time }} @ ₹{{ best_trade.entry_price }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Exit</span><span class="tc-val">{{ best_trade.exit_date }} {{ best_trade.exit_time }} @ ₹{{ best_trade.exit_price }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Qty / P&L%</span><span class="tc-val green">{{ best_trade.quantity }} shares / {{ best_trade.pnl_pct }}%</span></div>
+        <div class="tc-row"><span class="tc-lbl">Exit Reason</span>
+          <span class="badge badge-target">{{ best_trade.exit_reason }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Confidence</span><span class="tc-val">{{ best_trade.confidence }}%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section accent-orange">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--red);box-shadow:0 0 8px var(--red);"></span>
+        📉 Worst Trade
+      </span>
+    </div>
+    <div class="section-body">
+      <div class="trade-card">
+        <div class="tc-header">
+          <span class="tc-sym">{{ worst_trade.symbol }}</span>
+          <span class="tc-pnl val-red">₹{{ "{:,.0f}".format(worst_trade.pnl_net|float) }}</span>
+        </div>
+        <div class="tc-row"><span class="tc-lbl">Direction</span>
+          <span class="badge {% if worst_trade.direction == 'BUY' %}badge-buy{% else %}badge-sell{% endif %}">{{ worst_trade.direction }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Entry</span><span class="tc-val">{{ worst_trade.entry_date }} {{ worst_trade.entry_time }} @ ₹{{ worst_trade.entry_price }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Exit</span><span class="tc-val">{{ worst_trade.exit_date }} {{ worst_trade.exit_time }} @ ₹{{ worst_trade.exit_price }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Qty / P&L%</span><span class="tc-val red">{{ worst_trade.quantity }} shares / {{ worst_trade.pnl_pct }}%</span></div>
+        <div class="tc-row"><span class="tc-lbl">Exit Reason</span>
+          <span class="badge badge-sl">{{ worst_trade.exit_reason }}</span></div>
+        <div class="tc-row"><span class="tc-lbl">Confidence</span><span class="tc-val">{{ worst_trade.confidence }}%</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- ── RECENT TRADES TABLE ── -->
+<div class="section accent-purple">
+  <div class="section-header">
+    <span class="section-title">
+      <span class="dot" style="background:var(--purple);box-shadow:0 0 8px var(--purple);"></span>
+      All Backtest Trades (Latest 30)
+    </span>
+    <span style="color:var(--muted);font-size:11px;">{{ total_trades }} total trades</span>
+  </div>
+  <div class="section-body" style="padding:0;">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Symbol</th><th>Dir</th><th>Entry Date</th>
+          <th>Entry</th><th>Exit</th><th>Qty</th><th>P&L Net</th>
+          <th>P&L%</th><th>R:R</th><th>Reason</th><th>Conf</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in recent_trades %}
+        <tr>
+          <td style="color:var(--muted);">{{ t.trade_id }}</td>
+          <td><strong>{{ t.symbol }}</strong></td>
+          <td><span class="badge {% if t.direction == 'BUY' %}badge-buy{% else %}badge-sell{% endif %}">{{ t.direction }}</span></td>
+          <td style="color:var(--muted);">{{ t.entry_date }} {{ t.entry_time }}</td>
+          <td>₹{{ t.entry_price }}</td>
+          <td>₹{{ t.exit_price }}</td>
+          <td>{{ t.quantity }}</td>
+          <td class="{% if t.pnl_net|float >= 0 %}green{% else %}red{% endif %}">
+            ₹{{ "{:,.0f}".format(t.pnl_net|float) }}
+          </td>
+          <td class="{% if t.pnl_pct|float >= 0 %}green{% else %}red{% endif %}">{{ t.pnl_pct }}%</td>
+          <td>{{ t.rr_actual }}</td>
+          <td>
+            <span class="badge {% if 'TARGET' in t.exit_reason %}badge-target{% elif 'STOP' in t.exit_reason %}badge-sl{% else %}badge-eod{% endif %}">
+              {{ t.exit_reason }}
+            </span>
+          </td>
+          <td style="color:var(--muted);">{{ t.confidence }}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% endif %}
+</div><!-- /container -->
+
+<script>
+const EQUITY_DATA   = {{ equity_data | safe }};
+const SYMBOLS       = {{ symbols | safe }};
+const MONTHS        = {{ months | safe }};
+const MONTHLY_TOTALS= {{ monthly_totals | safe }};
+
+const COLORS = ["#4fc3f7","#00e676","#ff4b6e","#ffd54f","#ce93d8","#ffb74d","#26c6da","#f48fb1"];
+
+// ── EQUITY CHART ──
+if (SYMBOLS.length > 0 && document.getElementById("equityChart")) {
+  const datasets = SYMBOLS.map((sym, i) => ({
+    label: sym,
+    data: (EQUITY_DATA[sym] || []).map((v, idx) => ({ x: idx, y: v })),
+    borderColor: COLORS[i % COLORS.length],
+    backgroundColor: "transparent",
+    borderWidth: 2,
+    pointRadius: 0,
+    tension: 0.3,
+  }));
+  new Chart(document.getElementById("equityChart"), {
+    type: "line",
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: "#6b7fa8", font: { size: 11 } } },
+        tooltip: { mode: "index", intersect: false, backgroundColor: "rgba(14,20,32,0.95)", titleColor: "#e8f0fe", bodyColor: "#a8b8d0", borderColor: "#1e2a3a", borderWidth: 1 }
+      },
+      scales: {
+        x: { type: "linear", ticks: { color: "#6b7fa8" }, grid: { color: "rgba(30,42,58,0.8)" } },
+        y: { ticks: { color: "#6b7fa8", callback: v => "₹" + v.toLocaleString("en-IN") }, grid: { color: "rgba(30,42,58,0.8)" } }
+      }
+    }
+  });
+}
+
+// ── MONTHLY P&L CHART ──
+if (MONTHS.length > 0 && document.getElementById("monthlyChart")) {
+  new Chart(document.getElementById("monthlyChart"), {
+    type: "bar",
+    data: {
+      labels: MONTHS,
+      datasets: [{
+        label: "Monthly P&L (₹)",
+        data: MONTHLY_TOTALS,
+        backgroundColor: MONTHLY_TOTALS.map(v => v >= 0 ? "rgba(0,230,118,0.25)" : "rgba(255,75,110,0.25)"),
+        borderColor:      MONTHLY_TOTALS.map(v => v >= 0 ? "#00e676" : "#ff4b6e"),
+        borderWidth: 2,
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => "₹" + ctx.raw.toLocaleString("en-IN") }, backgroundColor: "rgba(14,20,32,0.95)", titleColor: "#e8f0fe", bodyColor: "#a8b8d0", borderColor: "#1e2a3a", borderWidth: 1 }
+      },
+      scales: {
+        x: { ticks: { color: "#6b7fa8", maxRotation: 45, font: { size: 10 } }, grid: { color: "rgba(30,42,58,0.8)" } },
+        y: { ticks: { color: "#6b7fa8", callback: v => "₹" + v.toLocaleString("en-IN") }, grid: { color: "rgba(30,42,58,0.8)" } }
+      }
+    }
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,49 @@
+# ── Secrets ─────────────────────────────────────────
+# NEVER commit .env — it holds the live Dhan token + Telegram bot creds.
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── Python ──────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ── Virtual environments ────────────────────────────
+venv/
+env/
+.venv/
+ENV/
+
+# ── OS ──────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Runtime / generated data ────────────────────────
+logs/
+*.log
+data/cache/
+
+# ── Backtest outputs (regenerable from code) ────────
+backtest_results/*.csv
+backtest_results/*.json
+backtest_results/*.xlsx
+backtest_results/*.pdf
+
+# Keep the backtest_results folder so the tool can write to it
+!backtest_results/.gitkeep
+
+# ── IDE ─────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
