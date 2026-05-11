@@ -430,7 +430,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <div style="display:flex;flex-direction:column;gap:1px;">
             <div class="intel-label" style="color:var(--teal);margin-bottom:0;">📐 NIFTY — CPR</div>
-            <span id="ltp-label-nifty" style="font-size:9px;color:var(--muted);letter-spacing:0.5px;">NIFTY Apr FUT</span>
+            <span id="ltp-label-nifty" style="font-size:9px;color:var(--muted);letter-spacing:0.5px;">NIFTY Jun FUT</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span id="ltp-nifty" style="font-size:16px;font-weight:800;color:var(--yellow);">—</span>
@@ -479,7 +479,7 @@
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
           <div style="display:flex;flex-direction:column;gap:1px;">
             <div class="intel-label" style="color:var(--purple);margin-bottom:0;">📐 BANKNIFTY — CPR</div>
-            <span id="ltp-label-bnf" style="font-size:9px;color:var(--muted);letter-spacing:0.5px;">BANKNIFTY Apr FUT</span>
+            <span id="ltp-label-bnf" style="font-size:9px;color:var(--muted);letter-spacing:0.5px;">BANKNIFTY Jun FUT</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span id="ltp-bnf" style="font-size:16px;font-weight:800;color:var(--yellow);">—</span>
@@ -741,7 +741,7 @@
     const el2 = document.getElementById(spotId);
     if (el1) el1.textContent = fmt;
     if (el2) el2.textContent = fmt;
-    // Update label to show "NIFTY Apr FUT" / "BANKNIFTY Apr FUT"
+    // Update label to show "NIFTY Jun FUT" / "BANKNIFTY Jun FUT"
     if (label) {
       const el3 = document.getElementById(labelId);
       if (el3) el3.textContent = label;

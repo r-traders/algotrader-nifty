@@ -1021,7 +1021,7 @@ def _fetch_iv_data(symbol: str) -> dict:
 @app.route("/api/ltp")
 def api_ltp():
     """
-    Live futures price for NIFTY Apr FUT and BANKNIFTY Apr FUT.
+    Live futures price for NIFTY Jun FUT and BANKNIFTY Jun FUT.
     Primary:  Dhan NSE_FNO LTP (futures contract).
     Fallback: Yahoo Finance index spot (^NSEI / ^NSEBANK).
     """
@@ -1071,7 +1071,7 @@ def api_ltp():
 
         result[sym] = {
             "ltp":    ltp,
-            "label":  inst.get("label", sym),    # "NIFTY Apr FUT" / "BANKNIFTY Apr FUT"
+            "label":  inst.get("label", sym),    # "NIFTY Jun FUT" / "BANKNIFTY Jun FUT"
             "expiry": inst.get("expiry", ""),
             "source": source,
             "error":  error,
