@@ -54,15 +54,15 @@ INSTRUMENT_IDS = {
         "security_id": "62329",
         "exchange":    "NSE_FNO",
         "instrument":  "FUTIDX",
-        "label":       "NIFTY Apr FUT",
-        "expiry":      "2026-04-24",
+        "label":       "NIFTY Jun FUT",
+        "expiry":      "2026-06-30",
     },
     "BANKNIFTY": {
         "security_id": "62326",
         "exchange":    "NSE_FNO",
         "instrument":  "FUTIDX",
-        "label":       "BANKNIFTY Apr FUT",
-        "expiry":      "2026-04-29",
+        "label":       "BANKNIFTY Jun FUT",
+        "expiry":      "2026-06-30",
     },
 }
 
