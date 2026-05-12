@@ -705,6 +705,38 @@
     </div><!-- /IV+MTF row -->
   </div>
 
+  <!-- ── OPTION CHAIN SNAPSHOTS — TODAY ── -->
+  <div class="section accent-orange" style="margin-bottom:20px;">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--orange);box-shadow:0 0 8px var(--orange);"></span>
+        OC Snapshots — Today
+      </span>
+      <span style="font-size:11px;color:var(--muted);">scheduled 09:20 · 11:15 · 13:30 IST</span>
+    </div>
+    <div class="section-body" style="overflow-x:auto;">
+      <table id="oc-snapshots-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.6px;">
+            <th style="text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);">Slot</th>
+            <th style="text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);">Time</th>
+            <th style="text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);">Symbol</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">Spot</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">Max Pain</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">PCR (OI)</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">Bias</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">Call Wall</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">Put Wall</th>
+            <th style="text-align:right;padding:10px 14px;border-bottom:1px solid var(--border);">ATM IV</th>
+          </tr>
+        </thead>
+        <tbody id="oc-snapshots-body">
+          <tr><td colspan="10" style="text-align:center;padding:18px;color:var(--muted);font-size:11px;">Loading snapshots…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- ── OPEN POSITIONS + SIGNALS ── -->
   <div class="two-col">
 
@@ -1112,6 +1144,47 @@
     }
   }
 
+  // ── OC Snapshots (today) ──
+  async function loadOCSnapshots() {
+    const body = document.getElementById('oc-snapshots-body');
+    if (!body) return;
+    try {
+      const r = await fetch('/api/oc_snapshots');
+      if (!r.ok) {
+        body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:14px;color:var(--red);">API ${r.status}</td></tr>`;
+        return;
+      }
+      const data = await r.json();
+      const snaps = data.snapshots || [];
+      if (!snaps.length) {
+        body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:18px;color:var(--muted);">No snapshots yet today — next at 09:20 / 11:15 / 13:30 IST</td></tr>`;
+        return;
+      }
+      // Sort by scheduled slot ASC, then symbol so NIFTY/BANKNIFTY are paired
+      snaps.sort((a, b) => (a.scheduled || '').localeCompare(b.scheduled || '') || (a.symbol||'').localeCompare(b.symbol||''));
+
+      const fmt   = v => (v === undefined || v === null) ? '—' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 2});
+      const fmt0  = v => (v === undefined || v === null) ? '—' : Number(v).toLocaleString('en-IN', {maximumFractionDigits: 0});
+      const biasColor = b => b === 'BULLISH' ? 'var(--green)' : b === 'BEARISH' ? 'var(--red)' : 'var(--muted)';
+
+      body.innerHTML = snaps.map(s => `
+        <tr>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);font-weight:600;">${s.slot || '—'}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);color:var(--muted);">${(s.timestamp || '').slice(11,19)}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);font-weight:700;">${s.symbol}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;">${fmt0(s.spot_price)}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;color:var(--yellow);font-weight:700;">${fmt0(s.max_pain)}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;">${fmt(s.pcr_oi)}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;color:${biasColor(s.pcr_bias)};font-weight:700;">${s.pcr_bias || '—'}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;color:var(--red);">${fmt0(s.call_wall)}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;color:var(--green);">${fmt0(s.put_wall)}</td>
+          <td style="padding:8px 14px;border-bottom:1px solid var(--border);text-align:right;">${fmt(s.atm_iv)}%</td>
+        </tr>`).join('');
+    } catch(e) {
+      body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:14px;color:var(--red);">⚠ ${e.message}</td></tr>`;
+    }
+  }
+
   async function loadMarketIntel() {
     for (const sym of ['NIFTY','BANKNIFTY']) {
       // CPR levels
@@ -1164,6 +1237,7 @@
     loadLTP();           // Immediate LTP on load
     loadMTFTrends();     // Multi-timeframe trends on load
     loadMarketIntel();   // CPR, IV, OC levels on load
+    loadOCSnapshots();   // Today's scheduled OC snapshots on load
 
     // Live clock — ticks every second, shows IST (Asia/Kolkata)
     const clockEl       = document.getElementById('live-clock');
@@ -1236,6 +1310,7 @@
   setInterval(loadLTP,         10 * 1000);        // LTP every 10 seconds (was 30s)
   setInterval(loadMarketIntel,  90 * 1000);       // CPR / IV / OC every 90 seconds (was 3m)
   setInterval(loadMTFTrends,    3 * 60 * 1000);   // MTF trends every 3 minutes (was 5m)
+  setInterval(loadOCSnapshots,  60 * 1000);       // OC snapshots — poll every 60s
 </script>
 </body>
 </html>

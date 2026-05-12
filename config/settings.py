@@ -230,6 +230,19 @@ SIGNAL_LOG_FILE = "logs/signals.csv"
 ERROR_LOG_FILE = "logs/errors.log"
 
 # ─────────────────────────────────────────────
+# OPTION CHAIN SNAPSHOT SCHEDULE (IST)
+# Engine writes a snapshot to logs/oc_snapshots_YYYY-MM-DD.json at each
+# of these times. Aligned with the strategy's entry windows + journal
+# Apr 21 lesson #7 (max pain shifts during the day; 1:30 PM most
+# important for expiry settlement). Each tuple: ("HH:MM", "slot_name").
+# ─────────────────────────────────────────────
+OC_SNAPSHOT_TIMES = [
+    ("09:20", "open_baseline"),       # right after open auction settles
+    ("11:15", "window_1_close"),      # end of Entry Window 1 — morning verdict
+    ("13:30", "window_2_open"),       # start of Entry Window 2 — journal-key time
+]
+
+# ─────────────────────────────────────────────
 # NOTIFICATION SETTINGS
 # ─────────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")

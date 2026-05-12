@@ -32,6 +32,7 @@ from config.settings import (
     AVOID_TRADE_NEAR_CLOSE_MINS, AVOID_TRADE_NEAR_OPEN_MINS,
     OPTION_CHAIN_CONFIG, DAILY_PNL_REPORT_TIME, NOTIFY_DAILY_PNL,
     EMA_VWAP_CPR_CONFIG, ENABLED_STRATEGIES,
+    OC_SNAPSHOT_TIMES,
     LOG_LEVEL, LOG_DIR
 )
 from data.dhan_client import DhanClient
@@ -111,6 +112,9 @@ class TradingEngine:
         self._last_oc_refresh: Dict[str, datetime] = {}
         self._daily_report_sent = False
         self._pnl_report_sent = False
+        # OC snapshot tracking — set of (date, slot, symbol) tuples already
+        # snapshotted today; reset implicitly when the date in the tuple changes.
+        self._oc_snaps_taken: set = set()
 
         # Setup graceful shutdown
         sys_signal.signal(sys_signal.SIGINT, self._shutdown)
@@ -241,7 +245,88 @@ class TradingEngine:
         except Exception as e:
             logger.debug(f"IV cache write failed: {e}")
 
+        # Take scheduled OC snapshot if we're inside any of the snapshot windows
+        try:
+            self._maybe_snapshot_oc(symbol, result, now)
+        except Exception as e:
+            logger.warning(f"OC snapshot failed for {symbol}: {e}")
+
         return result
+
+    def _maybe_snapshot_oc(self, symbol: str, oc_signal, now: datetime) -> None:
+        """
+        Persist a row to logs/oc_snapshots_<date>.json if `now` falls within
+        the +60-second window of any scheduled OC_SNAPSHOT_TIMES entry and
+        we haven't taken that (date, slot, symbol) snapshot yet today.
+        """
+        if oc_signal is None:
+            return
+        import json as _json
+        from datetime import time as _dt_time
+
+        today = now.date()
+        for slot_time, slot_name in OC_SNAPSHOT_TIMES:
+            hh, mm = map(int, slot_time.split(":"))
+            target_min = hh * 60 + mm
+            now_min = now.hour * 60 + now.minute
+            # Snapshot fires in a 2-minute window starting at the scheduled
+            # minute (engine cycle is 60s so we want some slack).
+            if not (target_min <= now_min <= target_min + 1):
+                continue
+
+            key = (today.isoformat(), slot_name, symbol)
+            if key in self._oc_snaps_taken:
+                continue
+
+            entry = {
+                "slot":         slot_name,
+                "scheduled":    slot_time,
+                "timestamp":    now.strftime("%Y-%m-%d %H:%M:%S"),
+                "symbol":       symbol,
+                "spot_price":   round(getattr(oc_signal, "spot_price", 0) or 0, 2),
+                "max_pain":     round(getattr(oc_signal, "max_pain", 0) or 0, 2),
+                "max_pain_dist_pct": round(getattr(oc_signal, "max_pain_distance_pct", 0) or 0, 2),
+                "pcr_oi":       round(getattr(oc_signal, "pcr_oi", 0) or 0, 3),
+                "pcr_volume":   round(getattr(oc_signal, "pcr_volume", 0) or 0, 3),
+                "pcr_bias":     getattr(oc_signal, "pcr_bias", "NEUTRAL"),
+                "call_wall":    round(getattr(oc_signal, "call_wall", 0) or 0, 2),
+                "put_wall":     round(getattr(oc_signal, "put_wall", 0) or 0, 2),
+                "atm_iv":       round(getattr(oc_signal, "atm_iv_avg", 0) or 0, 2),
+                "signal":       getattr(oc_signal, "signal", ""),
+            }
+
+            path = os.path.join(LOG_DIR, f"oc_snapshots_{today.isoformat()}.json")
+            existing = {"date": today.isoformat(), "snapshots": []}
+            if os.path.exists(path):
+                try:
+                    with open(path) as f:
+                        existing = _json.load(f)
+                except Exception:
+                    pass
+            existing.setdefault("snapshots", []).append(entry)
+            with open(path, "w") as f:
+                _json.dump(existing, f, indent=2)
+
+            self._oc_snaps_taken.add(key)
+            logger.info(
+                f"📸 OC snapshot saved | {slot_time} {slot_name} | {symbol} "
+                f"MP={entry['max_pain']} PCR={entry['pcr_oi']} "
+                f"CallWall={entry['call_wall']} PutWall={entry['put_wall']}"
+            )
+            # Telegram nudge
+            try:
+                self.notifier.send(
+                    f"📸 <b>OC Snapshot — {slot_time} {slot_name}</b>\n"
+                    f"<b>{symbol}</b>\n"
+                    f"Max Pain: <code>{entry['max_pain']}</code>\n"
+                    f"PCR (OI): <code>{entry['pcr_oi']}</code>  ({entry['pcr_bias']})\n"
+                    f"Call Wall: <code>{entry['call_wall']}</code>\n"
+                    f"Put Wall: <code>{entry['put_wall']}</code>\n"
+                    f"ATM IV: <code>{entry['atm_iv']}%</code>"
+                )
+            except Exception:
+                pass
+            break  # one slot per call
 
     def _process_options_signal(self, symbol: str, oc_signal, price_feed: Dict):
         """Process an option chain signal and potentially trade it."""

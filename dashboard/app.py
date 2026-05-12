@@ -1294,6 +1294,24 @@ def api_iv(symbol: str):
     return jsonify(_fetch_iv_data(symbol))
 
 
+@app.route("/api/oc_snapshots")
+def api_oc_snapshots():
+    """
+    Read today's OC snapshots from logs/oc_snapshots_<date>.json.
+    Returns {"date": "...", "snapshots": [...]} — empty list if no
+    snapshots taken yet today.
+    """
+    today = date.today().isoformat()
+    path = os.path.join(BASE_DIR, "logs", f"oc_snapshots_{today}.json")
+    if not os.path.exists(path):
+        return jsonify({"date": today, "snapshots": []})
+    try:
+        with open(path) as f:
+            return jsonify(json.load(f))
+    except Exception as e:
+        return jsonify({"date": today, "snapshots": [], "error": str(e)})
+
+
 @app.route("/api/trends/<symbol>")
 def api_trends(symbol: str):
     """
