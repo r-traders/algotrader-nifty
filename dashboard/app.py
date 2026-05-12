@@ -10,6 +10,8 @@ import sys
 import os
 import csv
 import json
+import logging
+from typing import Optional
 from datetime import datetime, date, timedelta, time as dt_time
 from flask import Flask, render_template, jsonify
 
@@ -22,7 +24,8 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 from config.settings import (
     RISK_CONFIG, MARKET_OPEN_TIME, MARKET_CLOSE_TIME,
     PAPER_TRADING, ENABLED_STRATEGIES,
-    TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+    TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID,
+    EMA_VWAP_CPR_CONFIG,
 )
 
 app = Flask(__name__)
@@ -256,6 +259,8 @@ def index():
         trades            = trades,
         active_strategies = active_strategies,
         telegram_ok       = telegram_ok,
+        ema_fast          = EMA_VWAP_CPR_CONFIG.ema_fast,
+        ema_slow          = EMA_VWAP_CPR_CONFIG.ema_slow,
         **summary,
     )
 
@@ -1015,6 +1020,58 @@ def _fetch_iv_data(symbol: str) -> dict:
 
 
 # ─────────────────────────────────────────────
+# RECENT-CLOSE LTP (futures, accurate)
+# ─────────────────────────────────────────────
+# Dhan's /marketfeed/ltp endpoint was observed returning the underlying
+# INDEX spot price for BANKNIFTY-MAY-FUT (sid 66068) instead of the
+# futures contract — 182-pt gap from broker-shown FUT price. The fix is
+# to read the last close of the intraday (5-min) endpoint, which uses
+# the same security_id the strategy operates on and returns the actual
+# futures price.
+_LTP_CACHE: dict = {}                  # {symbol: {"ts": epoch, "ltp": float}}
+_LTP_CACHE_TTL_SECS = 30               # refresh at most every 30s
+
+
+def _fetch_recent_close(symbol: str) -> Optional[float]:
+    """Return the latest 5-min close for the futures contract of `symbol`.
+    Cached for 30s to keep Dhan call rate low. Returns None on failure.
+    """
+    import time as _time
+    sym_up = symbol.upper()
+    cached = _LTP_CACHE.get(sym_up)
+    if cached and (_time.time() - cached["ts"]) < _LTP_CACHE_TTL_SECS:
+        return cached["ltp"]
+
+    inst = FUTURES_IDS.get(sym_up)
+    if not inst:
+        return None
+
+    dhan = _get_dhan_client()
+    if dhan is None:
+        return None
+
+    try:
+        candles = dhan.get_historical_data(
+            security_id      = inst["security_id"],
+            exchange_segment = inst["exchange"],
+            instrument_type  = inst["instrument"],
+            expiry_code      = 0,
+            from_date        = (date.today() - timedelta(days=5)).isoformat(),
+            to_date          = date.today().isoformat(),
+            interval         = "5",
+        )
+        if not candles:
+            return None
+        last_close = float(candles[-1]["close"])
+        if last_close > 0:
+            _LTP_CACHE[sym_up] = {"ts": _time.time(), "ltp": last_close}
+            return last_close
+    except Exception as e:
+        logging.warning(f"_fetch_recent_close({sym_up}): {e}")
+    return None
+
+
+# ─────────────────────────────────────────────
 # MULTI-TIMEFRAME TREND
 # ─────────────────────────────────────────────
 
@@ -1109,8 +1166,8 @@ def _fetch_mtf_trends(symbol: str) -> dict:
                 if len(rs) < 25:
                     trends[label] = {"trend": "NEUTRAL", "reason": f"only {len(rs)} bars"}
                     continue
-                e9  = ema(rs["close"], 9).iloc[-1]
-                e20 = ema(rs["close"], 20).iloc[-1]
+                e9  = ema(rs["close"], EMA_VWAP_CPR_CONFIG.ema_fast).iloc[-1]
+                e20 = ema(rs["close"], EMA_VWAP_CPR_CONFIG.ema_slow).iloc[-1]
                 close = float(rs["close"].iloc[-1])
                 if pd.isna(e9) or pd.isna(e20):
                     trends[label] = {"trend": "NEUTRAL", "reason": "EMA not ready"}
@@ -1162,11 +1219,13 @@ def api_ltp():
         source = None
         error  = None
 
-        # Attempt 1: Dhan NSE_FNO futures LTP
+        # Attempt 1: latest 5-min FUT candle close (cached 30s).
+        # More reliable than /marketfeed/ltp for BankNifty FUT, which we
+        # observed returning the INDEX spot value instead of futures.
         try:
-            ltp = dhan.get_ltp(inst["exchange"], sym, inst["security_id"])
+            ltp = _fetch_recent_close(sym)
             if ltp and ltp > 0:
-                source = "Dhan FUT"
+                source = "Dhan FUT (5m close)"
         except Exception as e:
             error = str(e)
 

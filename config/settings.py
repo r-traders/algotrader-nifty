@@ -136,8 +136,9 @@ SMART_MONEY_CONFIG = SmartMoneyConfig()
 # ─────────────────────────────────────────────
 @dataclass
 class EMAVWAPCPRConfig:
-    # EMA periods (journal rule #2)
-    ema_fast: int = 9
+    # EMA periods (journal rule #2) — fast period bumped 9 → 10 per
+    # discretionary decision on 12 May 2026.
+    ema_fast: int = 10
     ema_slow: int = 20
 
     # ATR + SL/T sizing (journal exits a/b/c)

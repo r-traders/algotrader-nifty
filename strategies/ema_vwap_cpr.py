@@ -1,10 +1,11 @@
 """
-EMA9/20 + VWAP + CPR Confluence Strategy
+EMA10/20 + VWAP + CPR Confluence Strategy
 Built strictly to the "My Rules" sheet of trading_journal.xlsx.
+(Fast EMA period bumped from 9 → 10 on 12 May 2026 per trader decision.)
 
 ENTRY — all 8 must be YES on a CLOSED 5-min bar:
     1. Price above VWAP (long) / below VWAP (short)
-    2. EMA 9 crossed above/below EMA 20 on this just-closed bar
+    2. EMA fast crossed above/below EMA slow on this just-closed bar
     3. RSI 55–65 (long) / 35–45 (short)
     4. Volume on crossover candle above 20-period average
     5. Candle has strong body (body / range ≥ 50%), not doji/spinning top
@@ -126,7 +127,7 @@ class EMAVWAPCPRStrategy:
             sig.notes = "already evaluated this bar"
             return sig
 
-        # ── Rule #2: true EMA9/20 crossover on this just-closed bar ──
+        # ── Rule #2: true EMA10/20 crossover on this just-closed bar ──
         cross_up   = ind["ema9_prev"] <= ind["ema20_prev"] and ind["ema9"] > ind["ema20"]
         cross_down = ind["ema9_prev"] >= ind["ema20_prev"] and ind["ema9"] < ind["ema20"]
         if not (cross_up or cross_down):
@@ -161,7 +162,7 @@ class EMAVWAPCPRStrategy:
             self._fill_short(sig, close, atr_val)
         self._last_signal_bar[symbol] = last_bar_ts
         sig.notes = (
-            f"{direction} XO  close={close:.2f} EMA9={ind['ema9']:.2f} EMA20={ind['ema20']:.2f} "
+            f"{direction} XO  close={close:.2f} EMA10={ind['ema9']:.2f} EMA20={ind['ema20']:.2f} "
             f"VWAP={ind['vwap']:.2f} RSI={ind['rsi']:.1f} body={ind['body_pct']:.0%} "
             f"vol={ind['volume']:.0f}/{ind['volume_ma20']:.0f}"
         )
@@ -209,7 +210,7 @@ class EMAVWAPCPRStrategy:
         sig.target_1 = float(close + self.cfg.t1_atr_mult * atr_val)
         sig.target_2 = float(close + self.cfg.t2_atr_mult * atr_val)
         sig.confidence = 80.0
-        sig.signal_sources = ["VWAP+", "EMA9>20 XO", "RSI 55-65", "Vol>20MA",
+        sig.signal_sources = ["VWAP+", "EMA10>20 XO", "RSI 55-65", "Vol>20MA",
                               "StrongBody", "Close>CPR"]
         risk = sig.entry_price - sig.stop_loss
         reward = sig.target_1 - sig.entry_price
@@ -223,7 +224,7 @@ class EMAVWAPCPRStrategy:
         sig.target_1 = float(close - self.cfg.t1_atr_mult * atr_val)
         sig.target_2 = float(close - self.cfg.t2_atr_mult * atr_val)
         sig.confidence = 80.0
-        sig.signal_sources = ["VWAP-", "EMA9<20 XO", "RSI 35-45", "Vol>20MA",
+        sig.signal_sources = ["VWAP-", "EMA10<20 XO", "RSI 35-45", "Vol>20MA",
                               "StrongBody", "Close<CPR"]
         risk = sig.stop_loss - sig.entry_price
         reward = sig.entry_price - sig.target_1
@@ -254,12 +255,12 @@ class EMAVWAPCPRStrategy:
 
         if position.direction == "BUY":
             if ema9 < ema20:
-                return True, f"EMA_CROSS_BACK (EMA9={ema9:.2f}<EMA20={ema20:.2f})"
+                return True, f"EMA_CROSS_BACK (EMA10={ema9:.2f}<EMA20={ema20:.2f})"
             if close < vwap_val:
                 return True, f"VWAP_CROSS (close={close:.2f}<VWAP={vwap_val:.2f})"
         elif position.direction == "SELL":
             if ema9 > ema20:
-                return True, f"EMA_CROSS_BACK (EMA9={ema9:.2f}>EMA20={ema20:.2f})"
+                return True, f"EMA_CROSS_BACK (EMA10={ema9:.2f}>EMA20={ema20:.2f})"
             if close > vwap_val:
                 return True, f"VWAP_CROSS (close={close:.2f}>VWAP={vwap_val:.2f})"
 
