@@ -353,7 +353,7 @@
       {% elif market_open %}🔴 LIVE
       {% else %}⏸ CLOSED{% endif %}
     </span>
-    <span class="last-updated">🕐 {{ now }}</span>
+    <span id="live-clock" class="last-updated">🕐 {{ now }}</span>
     <button id="theme-toggle" class="theme-toggle" title="Toggle light/dark theme" aria-label="Toggle theme">🌙</button>
   </div>
 </div>
@@ -1099,6 +1099,24 @@
     loadLTP();           // Immediate LTP on load
     loadMTFTrends();     // Multi-timeframe trends on load
     loadMarketIntel();   // CPR, IV, OC levels on load
+
+    // Live clock — ticks every second, shows IST (Asia/Kolkata)
+    const clockEl = document.getElementById('live-clock');
+    function tickClock() {
+      if (!clockEl) return;
+      const now = new Date();
+      const t = now.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata', hour12: false,
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+      });
+      const d = now.toLocaleDateString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: '2-digit', month: 'short', year: 'numeric',
+      });
+      clockEl.textContent = `🕐 ${d}, ${t} IST`;
+    }
+    tickClock();
+    setInterval(tickClock, 1000);
   });
   setInterval(loadLTP,         30 * 1000);        // LTP every 30 seconds
   setInterval(loadMarketIntel,  3 * 60 * 1000);   // CPR / IV / OC every 3 minutes
