@@ -254,7 +254,21 @@ def cpr(df: pd.DataFrame) -> Dict:
     if len(df_day) < 2:
         return {}
 
-    prev = df_day.iloc[-2]   # previous complete day
+    # Pick the "previous trading day":
+    # - If iloc[-1] is TODAY (resampling intraday bars produces a partial
+    #   daily bar for the in-progress session), use iloc[-2] = yesterday.
+    # - If iloc[-1] is already a completed past day (true when called with
+    #   daily-endpoint data — Dhan excludes today from that response),
+    #   use iloc[-1] = yesterday directly.
+    # Without this check, a daily-only fetch wrongly skipped to day-before-
+    # yesterday, picking Friday's H/L/C on a Tuesday morning (May 12, 2026).
+    from datetime import date as _date
+    today_ts = pd.Timestamp(_date.today())
+    last_ts  = pd.Timestamp(df_day.index[-1]).normalize()
+    if last_ts >= today_ts:
+        prev = df_day.iloc[-2]
+    else:
+        prev = df_day.iloc[-1]
     h, l, c = float(prev["high"]), float(prev["low"]), float(prev["close"])
 
     bc     = (h + l) / 2
