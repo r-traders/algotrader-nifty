@@ -1118,9 +1118,9 @@
     tickClock();
     setInterval(tickClock, 1000);
   });
-  setInterval(loadLTP,         30 * 1000);        // LTP every 30 seconds
-  setInterval(loadMarketIntel,  3 * 60 * 1000);   // CPR / IV / OC every 3 minutes
-  setInterval(loadMTFTrends,    5 * 60 * 1000);   // MTF trends every 5 minutes
+  setInterval(loadLTP,         10 * 1000);        // LTP every 10 seconds (was 30s)
+  setInterval(loadMarketIntel,  90 * 1000);       // CPR / IV / OC every 90 seconds (was 3m)
+  setInterval(loadMTFTrends,    3 * 60 * 1000);   // MTF trends every 3 minutes (was 5m)
 </script>
 </body>
 </html>
