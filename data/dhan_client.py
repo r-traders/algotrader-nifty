@@ -175,11 +175,15 @@ class DhanClient:
             "fromDate": from_date,
             "toDate": to_date,
         }
-        # Use /charts/intraday for minute-level data
+        # Use /charts/intraday for minute-level data.
+        # Dhan's intraday endpoint returns OHLCV arrays flat (no "data"
+        # wrapper). Older versions wrapped under {"data": {...}}. Handle
+        # both — same tolerant pattern as get_daily_candles.
         data = self._post("/charts/intraday", payload)
-        if not data or "data" not in data:
+        if not data:
             return []
-        return self._parse_candles(data["data"])
+        raw = data.get("data", data)
+        return self._parse_candles(raw)
 
     def get_daily_candles(
         self,
