@@ -935,7 +935,19 @@ def _fetch_oc_data(symbol: str) -> dict:
             strikes_sorted = sorted(float(k) for k in oc_dict.keys())
             ul_price = strikes_sorted[len(strikes_sorted) // 2]
 
-        # Aggregate call/put OI across all strikes
+        # Aggregate call/put OI across all strikes.
+        # Sanity band: only consider strikes within ±10% of spot for the
+        # wall/max-pain calculation. Dhan's OC includes a very wide strike
+        # range (44k–62k for BANKNIFTY) — far-OTM strikes occasionally
+        # have anomalously large OI from institutional positions that don't
+        # reflect intraday hedging interest. Without this filter,
+        # BANKNIFTY at spot 53,907 reported Call Wall = Put Wall = 60,000.
+        if ul_price > 0:
+            low_band  = ul_price * 0.90
+            high_band = ul_price * 1.10
+        else:
+            low_band, high_band = 0, float("inf")
+
         max_call_oi = max_put_oi  = 0
         call_wall   = put_wall    = 0.0
         total_call_oi = total_put_oi = 0
@@ -943,6 +955,8 @@ def _fetch_oc_data(symbol: str) -> dict:
 
         for strike_str, opts in oc_dict.items():
             sp   = float(strike_str)
+            if not (low_band <= sp <= high_band):
+                continue
             ce   = opts.get("ce", {}) or {}
             pe   = opts.get("pe", {}) or {}
             c_oi = int(ce.get("oi", 0) or 0)
@@ -956,6 +970,21 @@ def _fetch_oc_data(symbol: str) -> dict:
                 max_put_oi  = p_oi;  put_wall  = sp
 
             pain_map[sp] = {"c_oi": c_oi, "p_oi": p_oi}
+
+        # Guard: if the band filter excluded everything (shouldn't happen
+        # for normal trading hours), fall back to all strikes.
+        if not pain_map:
+            for strike_str, opts in oc_dict.items():
+                sp = float(strike_str)
+                ce = opts.get("ce", {}) or {}
+                pe = opts.get("pe", {}) or {}
+                c_oi = int(ce.get("oi", 0) or 0)
+                p_oi = int(pe.get("oi", 0) or 0)
+                if c_oi > max_call_oi:
+                    max_call_oi = c_oi; call_wall = sp
+                if p_oi > max_put_oi:
+                    max_put_oi = p_oi; put_wall = sp
+                pain_map[sp] = {"c_oi": c_oi, "p_oi": p_oi}
 
         # Max pain — strike where total ITM option losses are minimised
         max_pain = ul_price
