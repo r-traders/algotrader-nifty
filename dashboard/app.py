@@ -612,15 +612,62 @@ def _get_nse_session():
     return s
 
 
+def _normalize_expiry(s: str) -> str:
+    """
+    NSE sometimes returns expiry as "26-May-2026", sometimes as
+    "2026-05-26". Normalize both to ISO yyyy-mm-dd for comparison.
+    Returns "" if unparseable.
+    """
+    if not s:
+        return ""
+    s = str(s).strip()
+    for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d-%m-%Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(s, fmt).date().isoformat()
+        except Exception:
+            continue
+    return s   # leave as-is if no parse worked
+
+
 def _parse_nse_oc_list(oc_list: list, spot_price: float, nearest_expiry: str) -> dict:
     """
     Core parser — works on both records.data and filtered.data.
     Returns call_wall, put_wall, max_pain, atm_iv etc.
+
+    Robustness fixes (12 May 2026):
+      1. Match expiry by normalized ISO date (handles format mismatch
+         that previously caused fallback to all-expiry data with bogus
+         60,000 walls for BANKNIFTY at spot 54,000).
+      2. Restrict OI search to strikes within ±10% of spot — guards
+         against far-month strikes contaminating the wall calculation.
     """
-    # Prefer nearest expiry; fall back to all rows
-    nearest_data = [x for x in oc_list if x.get("expiryDate") == nearest_expiry]
+    norm_target = _normalize_expiry(nearest_expiry)
+    nearest_data = [x for x in oc_list
+                    if _normalize_expiry(x.get("expiryDate", "")) == norm_target]
+
+    # If still empty, return diagnostic error rather than silently fall
+    # back to all-expiry data (that was the bug).
     if not nearest_data:
-        nearest_data = oc_list
+        seen = sorted({_normalize_expiry(x.get("expiryDate","")) for x in oc_list})[:6]
+        return {
+            "error": (f"No OC rows match nearest expiry {nearest_expiry} "
+                      f"(normalized {norm_target}). Saw expiries: {seen}"),
+            "call_wall": 0, "put_wall": 0, "max_pain": 0,
+            "atm_iv": 0, "atm_strike": 0, "pcr_oi": 0,
+        }
+
+    # Strikes outside ±10% of spot have noisy OI that doesn't reflect
+    # actionable hedging interest — exclude them from wall/max-pain search.
+    if spot_price > 0:
+        low_band  = spot_price * 0.90
+        high_band = spot_price * 1.10
+        nearest_data_filtered = [
+            x for x in nearest_data
+            if low_band <= float(x.get("strikePrice", 0)) <= high_band
+        ]
+        # Only apply the filter if it leaves enough data to work with
+        if len(nearest_data_filtered) >= 5:
+            nearest_data = nearest_data_filtered
 
     max_call_oi = max_put_oi  = 0
     call_wall   = put_wall    = 0.0
