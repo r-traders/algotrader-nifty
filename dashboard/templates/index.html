@@ -490,12 +490,30 @@
       </svg>
 
       <!-- Digital readout next to it -->
-      <div style="display:flex;flex-direction:column;gap:6px;min-width:220px;">
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:240px;">
         <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700;">Date</div>
         <div id="analogue-date" style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:0.3px;">—</div>
         <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700;margin-top:10px;">Time</div>
         <div id="analogue-time" style="font-size:34px;font-weight:800;color:var(--orange);font-variant-numeric:tabular-nums;letter-spacing:1px;">--:--:--</div>
+
+        <!-- TRADING / NO TRADING status pill -->
+        <div id="trading-badge" style="
+          margin-top:12px;
+          display:inline-block;
+          padding:10px 18px;
+          border-radius:12px;
+          font-size:14px;
+          font-weight:800;
+          letter-spacing:1.5px;
+          text-align:center;
+          border:2px solid var(--muted);
+          background:rgba(122,144,184,0.10);
+          color:var(--muted);
+          transition:background 0.3s, color 0.3s, border-color 0.3s;
+          ">⏸ NO TRADING</div>
+
         <div id="analogue-session" style="font-size:11px;color:var(--muted);margin-top:6px;">Session: —</div>
+        <div id="analogue-next-window" style="font-size:11px;color:var(--muted);">Next window: —</div>
       </div>
 
     </div>
@@ -1248,6 +1266,33 @@
     const aTimeEl       = document.getElementById('analogue-time');
     const aSessionEl    = document.getElementById('analogue-session');
     const aStatusEl     = document.getElementById('analogue-clock-status');
+    const aBadgeEl      = document.getElementById('trading-badge');
+    const aNextEl       = document.getElementById('analogue-next-window');
+
+    // Strategy entry windows (IST) — keep in sync with EMAVWAPCPRStrategy.ENTRY_WINDOWS
+    const ENTRY_WINDOWS = [
+      { start: 9*60 + 45,  end: 11*60 + 15, label: "09:45–11:15" },
+      { start: 13*60 + 30, end: 14*60 + 30, label: "13:30–14:30" },
+    ];
+
+    function isTradingNow(t) {
+      return ENTRY_WINDOWS.some(w => t >= w.start && t <= w.end);
+    }
+
+    function nextWindowHint(t) {
+      // Returns text like "opens in 2h 14m" or "closes in 0h 38m"
+      const cur = ENTRY_WINDOWS.find(w => t >= w.start && t <= w.end);
+      if (cur) {
+        const left = cur.end - t;
+        return `Window ${cur.label} closes in ${Math.floor(left/60)}h ${left%60}m`;
+      }
+      const next = ENTRY_WINDOWS.find(w => w.start > t);
+      if (next) {
+        const wait = next.start - t;
+        return `Window ${next.label} opens in ${Math.floor(wait/60)}h ${wait%60}m`;
+      }
+      return "No more entry windows today";
+    }
 
     // Trading sessions (IST) — keep in sync with strategy entry windows
     function sessionLabel(h, m) {
@@ -1302,6 +1347,26 @@
       if (aStatusEl) {
         aStatusEl.textContent = label;
         aStatusEl.style.color = color;
+      }
+
+      // Big TRADING / NO TRADING badge
+      const totalMin = h * 60 + m;
+      const trading  = isTradingNow(totalMin);
+      if (aBadgeEl) {
+        if (trading) {
+          aBadgeEl.textContent = "🟢 TRADING";
+          aBadgeEl.style.color = "var(--green)";
+          aBadgeEl.style.borderColor = "var(--green)";
+          aBadgeEl.style.background = "rgba(31,157,99,0.12)";
+        } else {
+          aBadgeEl.textContent = "⏸ NO TRADING";
+          aBadgeEl.style.color = "var(--muted)";
+          aBadgeEl.style.borderColor = "var(--muted)";
+          aBadgeEl.style.background = "rgba(122,144,184,0.10)";
+        }
+      }
+      if (aNextEl) {
+        aNextEl.textContent = nextWindowHint(totalMin);
       }
     }
     tickClock();
