@@ -258,11 +258,27 @@ class TradingEngine:
         Persist a row to logs/oc_snapshots_<date>.json if `now` falls within
         the +60-second window of any scheduled OC_SNAPSHOT_TIMES entry and
         we haven't taken that (date, slot, symbol) snapshot yet today.
+
+        Skips (doesn't write) if the OC signal has no useful data — guards
+        against polluting the snapshot file with all-zero rows when Dhan
+        returns an empty option chain for the target expiry.
         """
         if oc_signal is None:
             return
         import json as _json
         from datetime import time as _dt_time
+
+        # Sentinel for empty OC: max_pain is the most reliable single-value
+        # indicator that the analyzer got real strike data.
+        max_pain_val = float(getattr(oc_signal, "max_pain", 0) or 0)
+        pcr_val      = float(getattr(oc_signal, "pcr_oi", 0)   or 0)
+        cw_val       = float(getattr(oc_signal, "call_wall", 0) or 0)
+        if max_pain_val == 0 and pcr_val == 0 and cw_val == 0:
+            logger.warning(
+                f"[OC snapshot] skipping {symbol} — OC signal is empty "
+                f"(likely Dhan returned no strike data for this expiry)"
+            )
+            return
 
         today = now.date()
         for slot_time, slot_name in OC_SNAPSHOT_TIMES:
@@ -528,10 +544,22 @@ class TradingEngine:
             # data["data"] can be a list (success) or a dict (error response)
             raw = data.get("data", [])
             if isinstance(raw, list) and raw:
-                # Filter to only valid date strings
-                expiries = [e for e in raw if isinstance(e, str) and len(e) == 10]
+                # Filter to only valid date strings AND exclude any that are
+                # already past (today or earlier). Today's date can appear in
+                # Dhan's expiry list for expired weeklies but the OC chain
+                # itself is empty — that produced the all-zero snapshots
+                # observed on 12 May 2026.
+                today_iso = date.today().isoformat()
+                expiries = [
+                    e for e in raw
+                    if isinstance(e, str) and len(e) == 10 and e > today_iso
+                ]
                 if expiries:
                     return expiries[0]
+                logger.warning(
+                    f"_get_nearest_expiry({symbol}): all returned expiries are "
+                    f"in the past ({raw[:3]}…) — using fallback Thursday"
+                )
             if data.get("status") == "failed":
                 logger.warning(f"Expiry list API failed for {symbol}: {data}")
         except Exception as e:
