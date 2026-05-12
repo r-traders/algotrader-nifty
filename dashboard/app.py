@@ -1294,6 +1294,107 @@ def api_iv(symbol: str):
     return jsonify(_fetch_iv_data(symbol))
 
 
+def _compute_gamma_radar(symbol: str) -> dict:
+    """
+    Build a "gamma radar" snapshot — list the key option-chain price
+    levels (Call Wall, Max Pain, ATM, Put Wall) with their distance
+    from current futures price + a HIGH/MED/LOW gamma-blast risk flag
+    based on how close price is to each level.
+
+    Returned shape:
+      {
+        "symbol": "NIFTY", "ltp": 23645, "atm": 23650,
+        "strike_step": 50,
+        "rows": [
+          {"role":"call_wall","label":"Call Wall","strike":24000,
+           "delta":+355,"abs":355,"risk":"LOW","note":"upside ceiling"},
+          ...
+        ],
+        "commentary": "Price below Max Pain & ATM — drift back to 23,900 likely"
+      }
+    """
+    sym_up = symbol.upper()
+    oc = _fetch_oc_data(sym_up)
+    if oc.get("error") and not (oc.get("call_wall") and oc.get("put_wall")):
+        return {"symbol": sym_up, "error": oc.get("error", "OC unavailable")}
+
+    # Current price — prefer accurate FUT close, fall back to OC's spot
+    ltp = _fetch_recent_close(sym_up) or float(oc.get("spot_price", 0) or 0)
+    if not ltp:
+        return {"symbol": sym_up, "error": "No current price available"}
+
+    step = 100 if sym_up == "BANKNIFTY" else 50
+    atm  = round(ltp / step) * step
+    cw   = float(oc.get("call_wall", 0) or 0)
+    pw   = float(oc.get("put_wall",  0) or 0)
+    mp   = float(oc.get("max_pain",  0) or 0)
+
+    def _risk(strike: float) -> str:
+        """Closer to the strike = higher gamma-blast risk."""
+        d = abs(strike - ltp)
+        # Risk thresholds scaled by the step size
+        if d <= step * 1.5:  return "HIGH"
+        if d <= step * 4.0:  return "MED"
+        return "LOW"
+
+    def _row(role: str, label: str, strike: float, icon: str, note: str) -> dict:
+        if not strike: return None
+        delta = strike - ltp
+        return {
+            "role":   role,
+            "label":  label,
+            "icon":   icon,
+            "strike": round(strike, 2),
+            "delta":  round(delta, 1),
+            "abs":    round(abs(delta), 1),
+            "risk":   _risk(strike),
+            "note":   note,
+        }
+
+    rows = list(filter(None, [
+        _row("call_wall", "Call Wall", cw, "⛰️",
+             "Upside ceiling — close above = gamma blast HIGHER"),
+        _row("max_pain",  "Max Pain",  mp, "🎯",
+             "Gravitational anchor — price drifts here into expiry"),
+        _row("atm",       "ATM",       atm, "⚡",
+             "Highest gamma strike — peak dealer-hedging activity"),
+        _row("put_wall",  "Put Wall",  pw, "🛡️",
+             "Downside floor — close below = gamma blast LOWER"),
+    ]))
+    # Visual ladder top-to-bottom = high-to-low strike
+    rows.sort(key=lambda r: r["strike"], reverse=True)
+
+    # Tiny rule-based commentary
+    cmt_parts = []
+    if cw and ltp >= cw:
+        cmt_parts.append(f"⚠ ABOVE Call Wall {cw:,.0f} — upside gamma squeeze underway")
+    if pw and ltp <= pw:
+        cmt_parts.append(f"⚠ BELOW Put Wall {pw:,.0f} — downside gamma cascade underway")
+    if mp and not cmt_parts:
+        if ltp < mp:
+            cmt_parts.append(f"Below Max Pain {mp:,.0f} — drift up likely")
+        elif ltp > mp:
+            cmt_parts.append(f"Above Max Pain {mp:,.0f} — drift down likely")
+    if not cmt_parts:
+        cmt_parts.append("In balance zone")
+
+    return {
+        "symbol":      sym_up,
+        "ltp":         round(ltp, 2),
+        "atm":         atm,
+        "strike_step": step,
+        "rows":        rows,
+        "commentary":  " · ".join(cmt_parts),
+        "fetched_at":  datetime.now().strftime("%H:%M:%S"),
+    }
+
+
+@app.route("/api/gamma_radar/<symbol>")
+def api_gamma_radar(symbol: str):
+    """Per-symbol gamma radar — see _compute_gamma_radar() docstring."""
+    return jsonify(_compute_gamma_radar(symbol))
+
+
 @app.route("/api/oc_snapshots")
 def api_oc_snapshots():
     """

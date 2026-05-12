@@ -723,6 +723,25 @@
     </div><!-- /IV+MTF row -->
   </div>
 
+  <!-- ── GAMMA RADAR — STRIKE WATCH ── -->
+  <div class="section accent-purple" style="margin-bottom:20px;">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--purple);box-shadow:0 0 8px var(--purple);"></span>
+        Gamma Radar — Strike Watch
+      </span>
+      <span style="font-size:11px;color:var(--muted);">⛰️ Call Wall · 🎯 Max Pain · ⚡ ATM · 🛡️ Put Wall</span>
+    </div>
+    <div class="section-body" style="display:grid;grid-template-columns:1fr 1fr;gap:20px;padding:20px;">
+      <div id="gamma-nifty" style="border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface2);">
+        <div style="color:var(--muted);font-size:11px;text-align:center;padding:24px;">Loading NIFTY radar…</div>
+      </div>
+      <div id="gamma-banknifty" style="border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface2);">
+        <div style="color:var(--muted);font-size:11px;text-align:center;padding:24px;">Loading BANKNIFTY radar…</div>
+      </div>
+    </div>
+  </div>
+
   <!-- ── OPTION CHAIN SNAPSHOTS — TODAY ── -->
   <div class="section accent-orange" style="margin-bottom:20px;">
     <div class="section-header">
@@ -1162,6 +1181,85 @@
     }
   }
 
+  // ── Gamma Radar — Strike watch (call wall / max pain / ATM / put wall) ──
+  function renderGammaRadar(sym, data) {
+    const target = document.getElementById('gamma-' + sym.toLowerCase());
+    if (!target) return;
+    if (data.error) {
+      target.innerHTML =
+        `<div style="font-weight:700;color:var(--text);margin-bottom:6px;">${sym}</div>
+         <div style="color:var(--red);font-size:11px;">⚠ ${data.error}</div>`;
+      return;
+    }
+
+    const ROLE_COLOR = {
+      call_wall: 'var(--red)',
+      max_pain:  'var(--yellow)',
+      atm:       'var(--purple)',
+      put_wall:  'var(--green)',
+    };
+    const RISK_BG = {
+      HIGH: 'rgba(240,97,122,0.18)',
+      MED:  'rgba(245,166,35,0.14)',
+      LOW:  'transparent',
+    };
+
+    const fmt = v => Number(v).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+    const rowsHtml = (data.rows || []).map(r => {
+      const sign = r.delta > 0 ? '+' : '';
+      const arrow = r.delta > 0 ? '↑' : r.delta < 0 ? '↓' : '·';
+      const deltaColor = r.delta > 0 ? 'var(--green)' : r.delta < 0 ? 'var(--red)' : 'var(--muted)';
+      return `
+        <tr style="background:${RISK_BG[r.risk] || 'transparent'};">
+          <td style="padding:7px 8px;border-bottom:1px solid var(--border);font-weight:700;color:${ROLE_COLOR[r.role] || 'var(--text)'};">
+            ${r.icon} ${r.label}
+          </td>
+          <td style="padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;font-weight:700;color:var(--text);">${fmt(r.strike)}</td>
+          <td style="padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;color:${deltaColor};font-variant-numeric:tabular-nums;">
+            ${sign}${fmt(r.delta)} ${arrow}
+          </td>
+          <td style="padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;font-size:10px;font-weight:700;color:${r.risk==='HIGH'?'var(--red)':r.risk==='MED'?'var(--orange)':'var(--muted)'};">
+            ${r.risk}
+          </td>
+        </tr>`;
+    }).join('');
+
+    target.innerHTML = `
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-weight:700;color:var(--text);font-size:14px;">${sym}</div>
+        <div style="font-size:11px;color:var(--muted);">LTP <b style="color:var(--yellow);">${fmt(data.ltp)}</b> · ATM <b>${fmt(data.atm)}</b> · step ${data.strike_step}</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px;">
+        <thead>
+          <tr style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:0.6px;">
+            <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border);">Level</th>
+            <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border);">Strike</th>
+            <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border);">Δ from LTP</th>
+            <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border);">γ Risk</th>
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+      <div style="font-size:11px;color:var(--muted);margin-top:10px;font-style:italic;line-height:1.4;">
+        ${data.commentary || ''}
+      </div>`;
+  }
+
+  async function loadGammaRadar() {
+    for (const sym of ['NIFTY','BANKNIFTY']) {
+      try {
+        const r = await fetch(`/api/gamma_radar/${sym}`);
+        if (!r.ok) {
+          renderGammaRadar(sym, { error: `API ${r.status}` });
+          continue;
+        }
+        renderGammaRadar(sym, await r.json());
+      } catch(e) {
+        renderGammaRadar(sym, { error: e.message });
+      }
+    }
+  }
+
   // ── OC Snapshots (today) ──
   async function loadOCSnapshots() {
     const body = document.getElementById('oc-snapshots-body');
@@ -1255,6 +1353,7 @@
     loadLTP();           // Immediate LTP on load
     loadMTFTrends();     // Multi-timeframe trends on load
     loadMarketIntel();   // CPR, IV, OC levels on load
+    loadGammaRadar();    // Gamma blast zones (call/put walls, max pain, ATM)
     loadOCSnapshots();   // Today's scheduled OC snapshots on load
 
     // Live clock — ticks every second, shows IST (Asia/Kolkata)
@@ -1376,6 +1475,7 @@
   setInterval(loadMarketIntel,  90 * 1000);       // CPR / IV / OC every 90 seconds (was 3m)
   setInterval(loadMTFTrends,    3 * 60 * 1000);   // MTF trends every 3 minutes (was 5m)
   setInterval(loadOCSnapshots,  60 * 1000);       // OC snapshots — poll every 60s
+  setInterval(loadGammaRadar,   90 * 1000);       // Gamma radar — same as MarketIntel cadence
 </script>
 </body>
 </html>
