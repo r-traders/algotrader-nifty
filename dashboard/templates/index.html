@@ -436,6 +436,71 @@
 
   </div>
 
+  <!-- ── ANALOGUE CLOCK (IST) ── -->
+  <div class="section accent-orange" style="margin-bottom:20px;">
+    <div class="section-header">
+      <span class="section-title">
+        <span class="dot" style="background:var(--orange);box-shadow:0 0 8px var(--orange);"></span>
+        Market Clock — IST (Asia/Kolkata)
+      </span>
+      <span id="analogue-clock-status" style="font-size:11px;color:var(--muted);font-weight:600;">—</span>
+    </div>
+    <div class="section-body" style="display:flex;align-items:center;justify-content:center;gap:48px;padding:24px 20px;flex-wrap:wrap;">
+
+      <!-- SVG clock face -->
+      <svg viewBox="-110 -110 220 220" width="220" height="220" style="display:block;">
+        <!-- face -->
+        <circle r="105" fill="var(--surface2)" stroke="var(--border)" stroke-width="2"/>
+        <!-- minute tick marks (60 small) -->
+        <g stroke="var(--muted)" stroke-width="1">
+          {% for i in range(60) %}
+            {% if i % 5 != 0 %}
+              <line x1="0" y1="-100" x2="0" y2="-96" transform="rotate({{ i * 6 }})"/>
+            {% endif %}
+          {% endfor %}
+        </g>
+        <!-- hour tick marks (12 large) -->
+        <g stroke="var(--text)" stroke-width="3" stroke-linecap="round">
+          {% for i in range(12) %}
+            <line x1="0" y1="-100" x2="0" y2="-88" transform="rotate({{ i * 30 }})"/>
+          {% endfor %}
+        </g>
+        <!-- hour numerals -->
+        <g fill="var(--text)" font-family="Inter, sans-serif" font-size="14" font-weight="700" text-anchor="middle" dominant-baseline="central">
+          <text x="0"   y="-75">12</text>
+          <text x="37.5" y="-65">1</text>
+          <text x="65"  y="-37.5">2</text>
+          <text x="75"  y="0">3</text>
+          <text x="65"  y="37.5">4</text>
+          <text x="37.5" y="65">5</text>
+          <text x="0"   y="75">6</text>
+          <text x="-37.5" y="65">7</text>
+          <text x="-65" y="37.5">8</text>
+          <text x="-75" y="0">9</text>
+          <text x="-65" y="-37.5">10</text>
+          <text x="-37.5" y="-65">11</text>
+        </g>
+        <!-- hands (rotated via JS each tick; origin is 0,0) -->
+        <line id="hour-hand"   x1="0" y1="10" x2="0" y2="-52" stroke="var(--text)"  stroke-width="6"   stroke-linecap="round" style="transform-origin:0 0;"/>
+        <line id="minute-hand" x1="0" y1="14" x2="0" y2="-78" stroke="var(--text)"  stroke-width="4"   stroke-linecap="round" style="transform-origin:0 0;"/>
+        <line id="second-hand" x1="0" y1="20" x2="0" y2="-92" stroke="var(--red)"   stroke-width="1.5" stroke-linecap="round" style="transform-origin:0 0;"/>
+        <!-- center pivot -->
+        <circle r="6" fill="var(--text)"/>
+        <circle r="2.5" fill="var(--red)"/>
+      </svg>
+
+      <!-- Digital readout next to it -->
+      <div style="display:flex;flex-direction:column;gap:6px;min-width:220px;">
+        <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700;">Date</div>
+        <div id="analogue-date" style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:0.3px;">—</div>
+        <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;font-weight:700;margin-top:10px;">Time</div>
+        <div id="analogue-time" style="font-size:34px;font-weight:800;color:var(--orange);font-variant-numeric:tabular-nums;letter-spacing:1px;">--:--:--</div>
+        <div id="analogue-session" style="font-size:11px;color:var(--muted);margin-top:6px;">Session: —</div>
+      </div>
+
+    </div>
+  </div>
+
   <!-- ── SYSTEM STATUS ── -->
   <div class="section accent-blue" style="margin-bottom:20px;">
     <div class="section-header">
@@ -1101,19 +1166,69 @@
     loadMarketIntel();   // CPR, IV, OC levels on load
 
     // Live clock — ticks every second, shows IST (Asia/Kolkata)
-    const clockEl = document.getElementById('live-clock');
+    const clockEl       = document.getElementById('live-clock');
+    const hourHand      = document.getElementById('hour-hand');
+    const minuteHand    = document.getElementById('minute-hand');
+    const secondHand    = document.getElementById('second-hand');
+    const aDateEl       = document.getElementById('analogue-date');
+    const aTimeEl       = document.getElementById('analogue-time');
+    const aSessionEl    = document.getElementById('analogue-session');
+    const aStatusEl     = document.getElementById('analogue-clock-status');
+
+    // Trading sessions (IST) — keep in sync with strategy entry windows
+    function sessionLabel(h, m) {
+      const t = h * 60 + m;
+      if (t < 9*60 + 15)              return ["PRE-MARKET",   "var(--muted)"];
+      if (t < 9*60 + 45)              return ["OPEN AUCTION", "var(--orange)"];
+      if (t <= 11*60 + 15)            return ["ENTRY WINDOW 1", "var(--green)"];
+      if (t < 13*60 + 30)             return ["MID-DAY LULL",   "var(--muted)"];
+      if (t <= 14*60 + 30)            return ["ENTRY WINDOW 2", "var(--green)"];
+      if (t <= 15*60 + 15)            return ["NO-NEW-ENTRIES (EOD)", "var(--orange)"];
+      if (t <= 15*60 + 30)            return ["FINAL 15 MIN",   "var(--red)"];
+      return ["MARKET CLOSED", "var(--muted)"];
+    }
+
     function tickClock() {
-      if (!clockEl) return;
-      const now = new Date();
-      const t = now.toLocaleTimeString('en-IN', {
-        timeZone: 'Asia/Kolkata', hour12: false,
-        hour: '2-digit', minute: '2-digit', second: '2-digit',
-      });
-      const d = now.toLocaleDateString('en-IN', {
-        timeZone: 'Asia/Kolkata',
-        day: '2-digit', month: 'short', year: 'numeric',
-      });
-      clockEl.textContent = `🕐 ${d}, ${t} IST`;
+      // IST parts via toLocaleString round-trip
+      const ist = new Date(
+        new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' })
+      );
+      const h = ist.getHours(), m = ist.getMinutes(), s = ist.getSeconds();
+
+      // Header clock (top-right of nav)
+      if (clockEl) {
+        const t = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        const d = ist.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        clockEl.textContent = `🕐 ${d}, ${t} IST`;
+      }
+
+      // Analogue clock hands (smooth sub-tick rotation for hour + minute)
+      const hourDeg   = ((h % 12) + m/60 + s/3600) * 30;
+      const minuteDeg = (m + s/60) * 6;
+      const secondDeg = s * 6;
+      if (hourHand)   hourHand.style.transform   = `rotate(${hourDeg}deg)`;
+      if (minuteHand) minuteHand.style.transform = `rotate(${minuteDeg}deg)`;
+      if (secondHand) secondHand.style.transform = `rotate(${secondDeg}deg)`;
+
+      // Big digital readout
+      if (aTimeEl) {
+        aTimeEl.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      }
+      if (aDateEl) {
+        aDateEl.textContent = ist.toLocaleDateString('en-IN', {
+          weekday:'short', day:'2-digit', month:'short', year:'numeric'
+        });
+      }
+      // Session label
+      const [label, color] = sessionLabel(h, m);
+      if (aSessionEl) {
+        aSessionEl.textContent = `Session: ${label}`;
+        aSessionEl.style.color = color;
+      }
+      if (aStatusEl) {
+        aStatusEl.textContent = label;
+        aStatusEl.style.color = color;
+      }
     }
     tickClock();
     setInterval(tickClock, 1000);
